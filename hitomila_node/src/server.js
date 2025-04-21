@@ -109,16 +109,24 @@ async function obtenerGalleryInfo(album_url, js_data_url, gg) {
   vm.createContext(context);
   vm.runInContext(jsCode, context);
 
-  const imageUrls = [];
+  if (context.galleryinfo) {
+    // Transformar files en array de URLs
+    if (context.galleryinfo.files) {
+      context.galleryinfo.files = context.galleryinfo.files.map(file => {
+        return url_from_url_from_hash('', file, 'webp', null, null, gg);
+      });
+    }
 
-  if (context.galleryinfo?.files) {
-    for (const file of context.galleryinfo.files) {
-      const url = url_from_url_from_hash('', file, 'webp', null, null, gg);
-      imageUrls.push(url);
+    // Transformar tags en string separado por comas
+    if (context.galleryinfo.tags) {
+      context.galleryinfo.tags = context.galleryinfo.tags
+        .map(tagObj => tagObj.tag) // Extraer solo el valor de 'tag'
+        .filter(tag => tag) // Filtrar tags vacíos
+        .join(', '); // Unir con comas
     }
   }
 
-  return imageUrls;
+  return context.galleryinfo;
 }
 
 app.get('/api/images', async (req, res) => {
@@ -138,12 +146,9 @@ app.get('/api/images', async (req, res) => {
   try {
     console.log(album_url)
     const gg = await obtenerGG(album_url);
-    const images = await obtenerGalleryInfo(album_url, js_data_url, gg);
+    const galleryInfo = await obtenerGalleryInfo(album_url, js_data_url, gg);
     res.json({
-      post_url: album_url,
-      gg_js_url: gg_js_url,
-      js_data_url: js_data_url,
-      images: images
+      gallery_info: galleryInfo // Devolvemos el galleryinfo completo con files modificado
     });
   } catch (error) {
     console.error('❌ Error:', error);
