@@ -1,12 +1,18 @@
 import express from 'express';
 import fetch from 'node-fetch';
 import vm from 'vm';
+import { LRUCache } from 'lru-cache';
 
 const app = express();
 const port = process.env.PORT || 3001;
 
 const gg_js_url = 'https://ltn.gold-usergeneratedcontent.net/gg.js';
 const domain2 = 'gold-usergeneratedcontent.net';
+
+const ggCache = new LRUCache({
+  max: 50,
+  ttl: 1000 * 60 * 30, // 30 minutos
+});
 
 function subdomain_from_url(url, base, dir, gg) {
   let retval = '';
@@ -76,7 +82,13 @@ function url_from_url_from_hash(galleryid, image, dir, ext, base, gg) {
   return url_from_url(url_from_hash(galleryid, image, dir, ext, gg), base, dir, gg);
 }
 
-async function obtenerGG(album_url) {
+// 🔄 Obtener GG con cache por galleryId
+async function obtenerGG(album_url, galleryId) {
+  if (ggCache.has(galleryId)) {
+    console.log(`📦 GG cargado desde cache para ID: ${galleryId}`);
+    return ggCache.get(galleryId);
+  }
+
   const res = await fetch(gg_js_url, {
     headers: {
       accept: '*/*',
@@ -86,10 +98,15 @@ async function obtenerGG(album_url) {
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.0.0',
     },
   });
+
   const js = await res.text();
   const context = { gg: undefined };
   vm.createContext(context);
   vm.runInContext(js, context);
+
+  ggCache.set(galleryId, context.gg);
+  console.log(`🆕 GG generado y cacheado para ID: ${galleryId}`);
+
   return context.gg;
 }
 
@@ -100,7 +117,7 @@ async function obtenerGalleryInfo(album_url, js_data_url, gg) {
       'accept-language': 'es-419,es;q=0.9',
       referer: encodeURI(album_url),
       'user-agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.0.0',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, como Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.0.0',
     },
   });
 
@@ -110,7 +127,6 @@ async function obtenerGalleryInfo(album_url, js_data_url, gg) {
   vm.runInContext(jsCode, context);
 
   if (context.galleryinfo) {
-    // Agregamos los headers al galleryinfo
     context.galleryinfo.headers = {
       'accept': '*/*',
       'accept-language': 'es-419,es;q=0.9',
@@ -125,17 +141,15 @@ async function obtenerGalleryInfo(album_url, js_data_url, gg) {
       'sec-fetch-dest': 'empty',
       'sec-fetch-mode': 'cors',
       'sec-fetch-site': 'cross-site',
-      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.0.0',
+      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, como Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.0.0',
     };
 
-    // Transformar files en array de URLs
     if (context.galleryinfo.files) {
       context.galleryinfo.files = context.galleryinfo.files.map(file => {
         return url_from_url_from_hash('', file, 'webp', null, null, gg);
       });
     }
 
-    // Transformar tags en string separado por comas
     if (context.galleryinfo.tags) {
       context.galleryinfo.tags = context.galleryinfo.tags
         .map(tagObj => tagObj.tag)
@@ -162,16 +176,25 @@ app.get('/api/images', async (req, res) => {
   const js_data_url = `https://ltn.gold-usergeneratedcontent.net/galleries/${galleryId}.js`;
 
   try {
-    console.log(album_url)
-    const gg = await obtenerGG(album_url);
+    console.log(`🌐 Procesando galería ID: ${galleryId}`);
+    const gg = await obtenerGG(album_url, galleryId);
     const galleryInfo = await obtenerGalleryInfo(album_url, js_data_url, gg);
-    res.json({
-      gallery_info: galleryInfo // Devolvemos el galleryinfo completo con files modificado
-    });
+    res.json({ gallery_info: galleryInfo });
   } catch (error) {
     console.error('❌ Error:', error);
     res.status(500).json({ error: 'Error interno al procesar la galería' });
   }
+});
+
+app.get('/', (req, res) => {
+  res.json({
+    message: '📡 Bienvenido a la API de Hitomi.la',
+    version: '4',
+    autor: 'ndyanx',
+    endpoints: {
+      obtener_imagenes: '/api/images?url=ALBUM_URL'
+    }
+  });
 });
 
 app.listen(port, () => {
