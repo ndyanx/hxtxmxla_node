@@ -110,6 +110,24 @@ async function obtenerGalleryInfo(album_url, js_data_url, gg) {
   vm.runInContext(jsCode, context);
 
   if (context.galleryinfo) {
+    // Agregamos los headers al galleryinfo
+    context.galleryinfo.headers = {
+      'accept': '*/*',
+      'accept-language': 'es-419,es;q=0.9',
+      'cache-control': 'no-cache',
+      'origin': 'https://hitomi.la',
+      'pragma': 'no-cache',
+      'priority': 'u=1, i',
+      'referer': album_url,
+      'sec-ch-ua': '"Microsoft Edge";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
+      'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"Windows"',
+      'sec-fetch-dest': 'empty',
+      'sec-fetch-mode': 'cors',
+      'sec-fetch-site': 'cross-site',
+      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.0.0',
+    };
+
     // Transformar files en array de URLs
     if (context.galleryinfo.files) {
       context.galleryinfo.files = context.galleryinfo.files.map(file => {
@@ -120,9 +138,9 @@ async function obtenerGalleryInfo(album_url, js_data_url, gg) {
     // Transformar tags en string separado por comas
     if (context.galleryinfo.tags) {
       context.galleryinfo.tags = context.galleryinfo.tags
-        .map(tagObj => tagObj.tag) // Extraer solo el valor de 'tag'
-        .filter(tag => tag) // Filtrar tags vacíos
-        .join(', '); // Unir con comas
+        .map(tagObj => tagObj.tag)
+        .filter(tag => tag)
+        .join(', ');
     }
   }
 
